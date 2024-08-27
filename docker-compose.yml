@@ -1,0 +1,47 @@
+---
+name: pi-netboot
+services:
+  tftp:
+    image: taskinen/tftp:latest
+    entrypoint: in.tftpd
+    command: -L -4 --secure --address 0.0.0.0:69 --verbosity 3 /srv/tftp
+    ports:
+      - 69:69/udp
+    volumes:
+      - /srv/tftp/:/srv/tftp/
+      - ./files/pxelinux.cfg/:/srv/tftp/pxelinux.cfg/
+
+  nfs:
+    image: erichough/nfs-server
+    restart: unless-stopped
+    cap_add:
+      - SYS_ADMIN
+      - SYS_MODULE
+    volumes:
+      - ./files/exports:/etc/exports:ro
+      - /srv/nfs/:/nfs/
+      - /lib/modules:/lib/modules:ro
+    ports:
+      - 2049:2049
+    environment:
+      - NFS_DISABLE_VERSION_3=1
+      - NFS_SERVER_THREAD_COUNT=2
+    security_opt:
+      - apparmor=erichough-nfs
+
+  http:
+    image: nginx:stable
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+    volumes:
+      - ./files/nginx/conf.d:/etc/nginx/conf.d:ro
+      - /srv/tftp:/var/www/default/boot
+      - /srv/nfs:/var/www/default/root
+    ports:
+      - 9000:8080
